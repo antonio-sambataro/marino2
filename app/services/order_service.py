@@ -1,13 +1,78 @@
 from datetime import datetime
 from app import db
-from app.models.order import Order, OrderItem, OrderVariant, Payment, DeliveryAddress, PaymentMethod
+from app.models.order import Order, OrderItem, OrderVariant, OrderSubProduct, Payment, DeliveryAddress, PaymentMethod
 from app.models.menu import Product, Variant
 from app.models.table import Table
+from sqlalchemy.orm import joinedload
+
+def validate_order_data(data):
+    """Validate order data before processing."""
+    errors = []
+    
+    # Check required fields
+    if 'delivery_type' not in data:
+        errors.append('Missing required field: delivery_type')
+    
+    # Validate delivery type
+    valid_delivery_types = ['shop', 'takeaway', 'delivery']
+    if 'delivery_type' in data and data['delivery_type'] not in valid_delivery_types:
+        errors.append(f"Invalid delivery_type. Must be one of: {', '.join(valid_delivery_types)}")
+    
+    # Validate table_id if delivery_type is 'shop'
+    if data.get('delivery_type') == 'shop' and not data.get('table_id'):
+        errors.append('Table ID is required for shop orders')
+    
+    # Validate table existence if provided
+    if data.get('table_id'):
+        table = Table.query.get(data.get('table_id'))
+        if not table:
+            errors.append(f"Table with ID {data.get('table_id')} not found")
+    
+    # Validate delivery address for delivery orders
+    if data.get('delivery_type') == 'delivery':
+        if not data.get('delivery_address') or not data.get('delivery_address', {}).get('address'):
+            errors.append('Delivery address is required for delivery orders')
+    
+    # Validate origin
+    valid_origins = ['selfordering', 'website', 'glovo', 'telephonic', 'direct']
+    if 'origin' in data and data['origin'] not in valid_origins:
+        errors.append(f"Invalid origin. Must be one of: {', '.join(valid_origins)}")
+    
+    # Validate products if provided
+    if 'products' in data and data['products']:
+        for i, product in enumerate(data['products']):
+            # Check product_id or id
+            product_id = product.get('id') or product.get('product_id')
+            if not product_id:
+                errors.append(f"Missing product ID in product at index {i}")
+                continue
+                
+            # Verify product exists
+            db_product = Product.query.get(product_id)
+            if not db_product:
+                errors.append(f"Product with ID {product_id} not found")
+    
+    # Validate payments if provided
+    if 'payments' in data and data['payments']:
+        for i, payment in enumerate(data['payments']):
+            if not payment.get('id'):
+                errors.append(f"Missing payment method ID in payment at index {i}")
+            
+            if not payment.get('amount'):
+                errors.append(f"Missing amount in payment at index {i}")
+    
+    return errors
 
 def get_orders(delivery_type=None, status=None, start_date=None, end_date=None):
     """Get all orders with optional filtering."""
     try:
-        query = Order.query
+        # Use eager loading to reduce database queries
+        query = Order.query.options(
+            joinedload(Order.table),
+            joinedload(Order.order_items).joinedload(OrderItem.product),
+            joinedload(Order.payments).joinedload(Payment.payment_method),
+            joinedload(Order.address)
+        )
         
         if delivery_type:
             query = query.filter(Order.delivery_type == delivery_type)
@@ -20,7 +85,7 @@ def get_orders(delivery_type=None, status=None, start_date=None, end_date=None):
                 start_date_obj = datetime.strptime(start_date, '%Y-%m-%d')
                 query = query.filter(Order.delivery_date >= start_date_obj)
             except ValueError:
-                pass
+                return {'success': False, 'message': 'Invalid start date format. Use YYYY-MM-DD'}, 400
         
         if end_date:
             try:
@@ -28,7 +93,7 @@ def get_orders(delivery_type=None, status=None, start_date=None, end_date=None):
                 end_date_obj = datetime.combine(end_date_obj.date(), datetime.max.time())
                 query = query.filter(Order.delivery_date <= end_date_obj)
             except ValueError:
-                pass
+                return {'success': False, 'message': 'Invalid end date format. Use YYYY-MM-DD'}, 400
         
         # Order by delivery date, newest first
         query = query.order_by(Order.delivery_date.desc())
@@ -40,29 +105,42 @@ def get_orders(delivery_type=None, status=None, start_date=None, end_date=None):
             'data': [order.to_dict() for order in orders]
         }
     except Exception as e:
-        return {'success': False, 'message': f'Error retrieving orders: {str(e)}'}
+        return {'success': False, 'message': f'Error retrieving orders: {str(e)}'}, 500
 
 def get_order(order_id):
     """Get an order by ID."""
     try:
-        order = Order.query.get(order_id)
+        # Use eager loading for related data
+        order = Order.query.options(
+            joinedload(Order.table),
+            joinedload(Order.order_items).joinedload(OrderItem.product),
+            joinedload(Order.order_items).joinedload(OrderItem.variants).joinedload(OrderVariant.variant),
+            joinedload(Order.order_items).joinedload(OrderItem.sub_products).joinedload(OrderSubProduct.product),
+            joinedload(Order.payments).joinedload(Payment.payment_method),
+            joinedload(Order.address)
+        ).get(order_id)
         
         if not order:
-            return {'success': False, 'message': 'Order not found'}
+            return {'success': False, 'message': 'Order not found'}, 404
         
         return {
             'success': True,
             'data': order.to_dict()
         }
     except Exception as e:
-        return {'success': False, 'message': f'Error retrieving order: {str(e)}'}
+        return {'success': False, 'message': f'Error retrieving order: {str(e)}'}, 500
 
 def create_order(order_data):
     """Create a new order."""
     try:
-        # Validate required fields
-        if 'delivery_type' not in order_data:
-            return {'success': False, 'message': 'Missing required field: delivery_type'}
+        # Validate order data
+        validation_errors = validate_order_data(order_data)
+        if validation_errors:
+            return {
+                'success': False, 
+                'message': 'Validation errors', 
+                'errors': validation_errors
+            }, 400
         
         # Parse delivery date
         delivery_date = None
@@ -70,9 +148,12 @@ def create_order(order_data):
             try:
                 delivery_date = datetime.strptime(order_data['delivery_date'], '%Y-%m-%d %H:%M:%S')
             except ValueError:
-                return {'success': False, 'message': 'Invalid delivery date format. Use YYYY-MM-DD HH:MM:SS'}
+                return {'success': False, 'message': 'Invalid delivery date format. Use YYYY-MM-DD HH:MM:SS'}, 400
         else:
             delivery_date = datetime.utcnow()
+        
+        # Start a transaction
+        db.session.begin()
         
         # Create the order
         order = Order(
@@ -115,6 +196,11 @@ def create_order(order_data):
                 if not product_id:
                     continue
                 
+                # Verify product exists
+                product = Product.query.get(int(product_id))
+                if not product:
+                    continue
+                
                 # Create order item
                 item = OrderItem(
                     product_id=int(product_id),
@@ -130,6 +216,11 @@ def create_order(order_data):
                         if not variant_id:
                             continue
                         
+                        # Verify variant exists
+                        variant = Variant.query.get(int(variant_id))
+                        if not variant:
+                            continue
+                        
                         variant = OrderVariant(
                             variant_id=int(variant_id),
                             qty=int(variant_data.get('qty', 1)),
@@ -142,6 +233,11 @@ def create_order(order_data):
                     for sub_data in item_data['products']:
                         sub_product_id = sub_data.get('id') or sub_data.get('product_id')
                         if not sub_product_id:
+                            continue
+                        
+                        # Verify sub-product exists
+                        sub_product_obj = Product.query.get(int(sub_product_id))
+                        if not sub_product_obj:
                             continue
                         
                         sub_product = OrderSubProduct(
@@ -186,7 +282,7 @@ def create_order(order_data):
         }
     except Exception as e:
         db.session.rollback()
-        return {'success': False, 'message': f'Error creating order: {str(e)}'}
+        return {'success': False, 'message': f'Error creating order: {str(e)}'}, 500
 
 def update_order_status(order_id, status):
     """Update an order's status."""
@@ -194,11 +290,11 @@ def update_order_status(order_id, status):
         order = Order.query.get(order_id)
         
         if not order:
-            return {'success': False, 'message': 'Order not found'}
+            return {'success': False, 'message': 'Order not found'}, 404
         
         valid_statuses = ['confirmed', 'preparing', 'ready', 'completed', 'cancelled']
         if status not in valid_statuses:
-            return {'success': False, 'message': f'Invalid status. Must be one of: {", ".join(valid_statuses)}'}
+            return {'success': False, 'message': f'Invalid status. Must be one of: {", ".join(valid_statuses)}'}, 400
         
         order.status = status
         db.session.commit()
@@ -209,7 +305,7 @@ def update_order_status(order_id, status):
         }
     except Exception as e:
         db.session.rollback()
-        return {'success': False, 'message': f'Error updating order status: {str(e)}'}
+        return {'success': False, 'message': f'Error updating order status: {str(e)}'}, 500
 
 def add_item_to_order(order_id, item_data):
     """Add an item to an order."""
@@ -217,17 +313,22 @@ def add_item_to_order(order_id, item_data):
         order = Order.query.get(order_id)
         
         if not order:
-            return {'success': False, 'message': 'Order not found'}
+            return {'success': False, 'message': 'Order not found'}, 404
         
         # Validate required fields
         if 'product_id' not in item_data:
-            return {'success': False, 'message': 'Missing required field: product_id'}
+            return {'success': False, 'message': 'Missing required field: product_id'}, 400
         
         if 'qty' not in item_data:
-            return {'success': False, 'message': 'Missing required field: qty'}
+            return {'success': False, 'message': 'Missing required field: qty'}, 400
         
         if 'price' not in item_data:
-            return {'success': False, 'message': 'Missing required field: price'}
+            return {'success': False, 'message': 'Missing required field: price'}, 400
+        
+        # Verify product exists
+        product = Product.query.get(int(item_data['product_id']))
+        if not product:
+            return {'success': False, 'message': f'Product with ID {item_data["product_id"]} not found'}, 400
         
         # Create order item
         item = OrderItem(
@@ -241,6 +342,14 @@ def add_item_to_order(order_id, item_data):
         # Add variants if any
         if 'variants' in item_data and item_data['variants']:
             for variant_data in item_data['variants']:
+                if 'id' not in variant_data:
+                    continue
+                
+                # Verify variant exists
+                variant = Variant.query.get(int(variant_data['id']))
+                if not variant:
+                    continue
+                
                 variant = OrderVariant(
                     variant_id=int(variant_data['id']),
                     qty=int(variant_data.get('qty', 1)),
@@ -262,7 +371,7 @@ def add_item_to_order(order_id, item_data):
         }
     except Exception as e:
         db.session.rollback()
-        return {'success': False, 'message': f'Error adding item to order: {str(e)}'}
+        return {'success': False, 'message': f'Error adding item to order: {str(e)}'}, 500
 
 def update_order_item(order_id, item_id, item_data):
     """Update an item in an order."""
@@ -270,12 +379,12 @@ def update_order_item(order_id, item_id, item_data):
         order = Order.query.get(order_id)
         
         if not order:
-            return {'success': False, 'message': 'Order not found'}
+            return {'success': False, 'message': 'Order not found'}, 404
         
         item = OrderItem.query.get(item_id)
         
         if not item or item.order_id != order.id:
-            return {'success': False, 'message': 'Item not found in this order'}
+            return {'success': False, 'message': 'Item not found in this order'}, 404
         
         # Calculate old subtotal for updating order total
         old_subtotal = item.price * item.qty
@@ -304,7 +413,7 @@ def update_order_item(order_id, item_id, item_data):
         }
     except Exception as e:
         db.session.rollback()
-        return {'success': False, 'message': f'Error updating order item: {str(e)}'}
+        return {'success': False, 'message': f'Error updating order item: {str(e)}'}, 500
 
 def remove_item_from_order(order_id, item_id):
     """Remove an item from an order."""
@@ -312,12 +421,12 @@ def remove_item_from_order(order_id, item_id):
         order = Order.query.get(order_id)
         
         if not order:
-            return {'success': False, 'message': 'Order not found'}
+            return {'success': False, 'message': 'Order not found'}, 404
         
         item = OrderItem.query.get(item_id)
         
         if not item or item.order_id != order.id:
-            return {'success': False, 'message': 'Item not found in this order'}
+            return {'success': False, 'message': 'Item not found in this order'}, 404
         
         # Update order total
         order.total -= item.price * item.qty
@@ -332,7 +441,7 @@ def remove_item_from_order(order_id, item_id):
         }
     except Exception as e:
         db.session.rollback()
-        return {'success': False, 'message': f'Error removing item from order: {str(e)}'}
+        return {'success': False, 'message': f'Error removing item from order: {str(e)}'}, 500
 
 def add_payment_to_order(order_id, payment_data):
     """Add a payment to an order."""
@@ -340,14 +449,14 @@ def add_payment_to_order(order_id, payment_data):
         order = Order.query.get(order_id)
         
         if not order:
-            return {'success': False, 'message': 'Order not found'}
+            return {'success': False, 'message': 'Order not found'}, 404
         
         # Validate required fields
         if 'payment_method_id' not in payment_data:
-            return {'success': False, 'message': 'Missing required field: payment_method_id'}
+            return {'success': False, 'message': 'Missing required field: payment_method_id'}, 400
         
         if 'amount' not in payment_data:
-            return {'success': False, 'message': 'Missing required field: amount'}
+            return {'success': False, 'message': 'Missing required field: amount'}, 400
         
         # Check if payment method exists
         payment_method_id = int(payment_data['payment_method_id'])
@@ -378,4 +487,4 @@ def add_payment_to_order(order_id, payment_data):
         }
     except Exception as e:
         db.session.rollback()
-        return {'success': False, 'message': f'Error adding payment to order: {str(e)}'}
+        return {'success': False, 'message': f'Error adding payment to order: {str(e)}'}, 500

@@ -1,5 +1,7 @@
+
 from datetime import datetime
 from app import db
+from app.models.table import Table  # Add this import
 
 class Order(db.Model):
     """Order model representing customer orders."""

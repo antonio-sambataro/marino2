@@ -1,0 +1,675 @@
+{% extends 'base.html' %}
+
+{% block title %}Variant Categories - Restaurant Self-Order{% endblock %}
+
+{% block content %}
+<div class="variants-page">
+    <div class="page-header">
+        <h1>Variant Categories</h1>
+        <button class="btn" id="add-variant-category-btn">Add Variant Category</button>
+    </div>
+    
+    <div class="alert" id="alert-box" style="display: none;"></div>
+    
+    <div id="variant-categories-container">
+        <div class="loading-state">Loading variant categories...</div>
+    </div>
+    
+    <!-- Variant Category Modal -->
+    <div class="modal large-modal" id="variant-category-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Add Variant Category</h3>
+                <button class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="variant-category-form">
+                    <input type="hidden" id="variant-category-id">
+                    
+                    <div class="form-group">
+                        <label for="variant-category-name">Category Name</label>
+                        <input type="text" id="variant-category-name" name="name" required>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="variant-category-min">Minimum Selections</label>
+                            <input type="number" id="variant-category-min" name="min" min="0" value="0">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="variant-category-max">Maximum Selections</label>
+                            <input type="number" id="variant-category-max" name="max" min="1" value="1">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="variant-category-has-price" name="has_price" checked>
+                            Variants have additional price
+                        </label>
+                    </div>
+                    
+                    <div class="section-divider">
+                        <h4>Variants</h4>
+                        <button type="button" class="btn btn-sm" id="add-variant-btn">Add Variant</button>
+                    </div>
+                    
+                    <div id="variants-container">
+                        <!-- Variants will be added here -->
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Save Variant Category</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Delete Confirmation Modal -->
+    <div class="modal" id="delete-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Delete Variant Category</h3>
+                <button class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this variant category?</p>
+                <p class="warning-text">This will also remove this variant category from all products that use it!</p>
+                <input type="hidden" id="delete-variant-category-id">
+                <div class="modal-actions">
+                    <button class="btn btn-secondary close-btn">Cancel</button>
+                    <button class="btn btn-accent" id="confirm-delete">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    
+    .loading-state {
+        padding: 40px;
+        text-align: center;
+        background-color: var(--white);
+        border-radius: var(--border-radius);
+        box-shadow: var(--box-shadow);
+    }
+    
+    .variant-category-card {
+        background-color: var(--white);
+        border-radius: var(--border-radius);
+        box-shadow: var(--box-shadow);
+        margin-bottom: 20px;
+        overflow: hidden;
+    }
+    
+    .variant-category-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 20px;
+        background-color: var(--light-gray);
+        border-bottom: 1px solid #ddd;
+    }
+    
+    .variant-category-name {
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+    
+    .variant-category-info {
+        font-size: 0.9rem;
+        color: var(--dark-gray);
+    }
+    
+    .variant-category-content {
+        padding: 20px;
+    }
+    
+    .variants-list {
+        margin-top: 10px;
+    }
+    
+    .variant-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .variant-item:last-child {
+        border-bottom: none;
+    }
+    
+    .variant-name {
+        font-weight: 500;
+    }
+    
+    .variant-price {
+        color: var(--primary-color);
+        font-weight: 500;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .edit-btn, .delete-btn {
+        cursor: pointer;
+        padding: 5px 10px;
+        border-radius: 4px;
+        background-color: var(--light-gray);
+        color: var(--text-color);
+        border: none;
+        transition: var(--transition);
+    }
+    
+    .edit-btn:hover {
+        background-color: var(--primary-color);
+        color: var(--white);
+    }
+    
+    .delete-btn:hover {
+        background-color: var(--accent-color);
+        color: var(--white);
+    }
+    
+    .form-row {
+        display: flex;
+        gap: 15px;
+    }
+    
+    .form-row .form-group {
+        flex: 1;
+    }
+    
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+    
+    .checkbox-label input {
+        width: auto;
+    }
+    
+    .section-divider {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 20px 0 10px;
+        padding-top: 15px;
+        border-top: 1px solid #eee;
+    }
+    
+    .variant-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 10px;
+        padding: 10px;
+        background-color: var(--light-gray);
+        border-radius: 4px;
+    }
+    
+    .variant-row .form-group {
+        margin-bottom: 0;
+        flex: 1;
+    }
+    
+    .btn-sm {
+        padding: 5px 10px;
+        font-size: 0.9rem;
+    }
+    
+    .remove-variant-btn {
+        background: none;
+        border: none;
+        color: var(--accent-color);
+        cursor: pointer;
+        font-size: 1.2rem;
+    }
+    
+    /* Alert and modal styles are the same as in price_lists.html */
+    .alert {
+        padding: 10px;
+        margin-bottom: 15px;
+        border-radius: 4px;
+    }
+    
+    .alert-danger {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+    
+    .alert-success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+    
+    .warning-text {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+    }
+    
+    .modal-content {
+        background-color: white;
+        margin: 10% auto;
+        padding: 20px;
+        border-radius: 8px;
+        max-width: 500px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    }
+    
+    .large-modal .modal-content {
+        max-width: 700px;
+    }
+    
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+        margin-bottom: 15px;
+    }
+    
+    .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Check if user is authenticated
+        if (!Auth.isAuthenticated()) {
+            window.location.href = '/login';
+            return;
+        }
+        
+        // Load variant categories
+        loadVariantCategories();
+        
+        // Modal elements
+        const variantCategoryModal = document.getElementById('variant-category-modal');
+        const deleteModal = document.getElementById('delete-modal');
+        const addVariantCategoryBtn = document.getElementById('add-variant-category-btn');
+        const closeBtns = document.querySelectorAll('.close-btn');
+        
+        // Open add variant category modal
+        addVariantCategoryBtn.addEventListener('click', () => {
+            document.getElementById('modal-title').textContent = 'Add Variant Category';
+            document.getElementById('variant-category-id').value = '';
+            document.getElementById('variant-category-form').reset();
+            
+            // Clear variants container and add one empty variant
+            const variantsContainer = document.getElementById('variants-container');
+            variantsContainer.innerHTML = '';
+            addVariantRow();
+            
+            variantCategoryModal.style.display = 'block';
+        });
+        
+        // Close modals
+        closeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                variantCategoryModal.style.display = 'none';
+                deleteModal.style.display = 'none';
+            });
+        });
+        
+        // Close modals when clicking outside
+        window.addEventListener('click', (e) => {
+            if (e.target === variantCategoryModal) {
+                variantCategoryModal.style.display = 'none';
+            } else if (e.target === deleteModal) {
+                deleteModal.style.display = 'none';
+            }
+        });
+        
+        // Add variant button
+        document.getElementById('add-variant-btn').addEventListener('click', addVariantRow);
+        
+        // Variant category form submission
+        document.getElementById('variant-category-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const variantCategoryId = document.getElementById('variant-category-id').value;
+            const name = document.getElementById('variant-category-name').value;
+            const min = parseInt(document.getElementById('variant-category-min').value) || 0;
+            const max = parseInt(document.getElementById('variant-category-max').value) || 1;
+            const hasPrice = document.getElementById('variant-category-has-price').checked;
+            
+            // Collect variants
+            const variants = [];
+            document.querySelectorAll('.variant-row').forEach(row => {
+                const variantName = row.querySelector('.variant-name-input').value;
+                const variantPrice = parseFloat(row.querySelector('.variant-price-input').value) || 0;
+                const variantId = row.getAttribute('data-id');
+                
+                if (variantName) {
+                    const variant = {
+                        name: variantName,
+                        price: variantPrice
+                    };
+                    
+                    if (variantId) {
+                        variant.id = parseInt(variantId);
+                    }
+                    
+                    variants.push(variant);
+                }
+            });
+            
+            // Build data object
+            const variantCategoryData = {
+                name: name,
+                min: min,
+                max: max,
+                has_price: hasPrice,
+                variants: variants
+            };
+            
+            try {
+                let url, method;
+                
+                if (variantCategoryId) {
+                    // Update existing variant category
+                    url = `/api/menu/variant-categories/${variantCategoryId}`;
+                    method = 'PUT';
+                } else {
+                    // Create new variant category
+                    url = '/api/menu/variant-categories';
+                    method = 'POST';
+                }
+                
+                const response = await Auth.fetch(url, {
+                    method: method,
+                    body: JSON.stringify(variantCategoryData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert(`Variant category ${variantCategoryId ? 'updated' : 'created'} successfully`, 'success');
+                    variantCategoryModal.style.display = 'none';
+                    loadVariantCategories();
+                } else {
+                    showAlert(data.message, 'danger');
+                }
+            } catch (error) {
+                showAlert(`Failed to ${variantCategoryId ? 'update' : 'create'} variant category`, 'danger');
+                console.error('Variant category save error:', error);
+            }
+        });
+        
+        // Confirm delete button
+        document.getElementById('confirm-delete').addEventListener('click', async () => {
+            const variantCategoryId = document.getElementById('delete-variant-category-id').value;
+            
+            try {
+                const response = await Auth.fetch(`/api/menu/variant-categories/${variantCategoryId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('Variant category deleted successfully', 'success');
+                    deleteModal.style.display = 'none';
+                    loadVariantCategories();
+                } else {
+                    showAlert(data.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('Failed to delete variant category', 'danger');
+                console.error('Variant category delete error:', error);
+            }
+        });
+    });
+    
+    // Add a new variant row to the form
+    function addVariantRow(variantData = null) {
+        const variantsContainer = document.getElementById('variants-container');
+        const hasPrice = document.getElementById('variant-category-has-price').checked;
+        
+        const row = document.createElement('div');
+        row.className = 'variant-row';
+        
+        if (variantData && variantData.id) {
+            row.setAttribute('data-id', variantData.id);
+        }
+        
+        row.innerHTML = `
+            <div class="form-group">
+                <input type="text" class="variant-name-input" placeholder="Variant name" value="${variantData ? variantData.name : ''}" required>
+            </div>
+            
+            <div class="form-group" ${!hasPrice ? 'style="display: none;"' : ''}>
+                <input type="number" class="variant-price-input" placeholder="Price" min="0" step="0.01" value="${variantData ? variantData.price : '0'}" ${!hasPrice ? 'disabled' : ''}>
+            </div>
+            
+            <button type="button" class="remove-variant-btn">&times;</button>
+        `;
+        
+        variantsContainer.appendChild(row);
+        
+        // Add remove button functionality
+        row.querySelector('.remove-variant-btn').addEventListener('click', () => {
+            row.remove();
+        });
+    }
+    
+    // Toggle price inputs when "has price" checkbox changes
+    document.getElementById('variant-category-has-price').addEventListener('change', function() {
+        const priceInputs = document.querySelectorAll('.variant-price-input');
+        const priceContainers = document.querySelectorAll('.variant-row .form-group:nth-child(2)');
+        
+        if (this.checked) {
+            priceContainers.forEach(container => container.style.display = 'block');
+            priceInputs.forEach(input => input.disabled = false);
+        } else {
+            priceContainers.forEach(container => container.style.display = 'none');
+            priceInputs.forEach(input => input.disabled = true);
+        }
+    });
+    
+    // Load variant categories from API
+    async function loadVariantCategories() {
+        const container = document.getElementById('variant-categories-container');
+        container.innerHTML = '<div class="loading-state">Loading variant categories...</div>';
+        
+        try {
+            const response = await Auth.fetch('/api/menu/variant-categories');
+            const data = await response.json();
+            
+            if (data.success && data.data.length > 0) {
+                container.innerHTML = '';
+                
+                data.data.forEach(category => {
+                    const card = document.createElement('div');
+                    card.className = 'variant-category-card';
+                    
+                    // Format price string
+                    const hasPriceText = category.has_price ? 'Has pricing' : 'No pricing';
+                    
+                    card.innerHTML = `
+                        <div class="variant-category-header">
+                            <div>
+                                <div class="variant-category-name">${category.name}</div>
+                                <div class="variant-category-info">
+                                    Min: ${category.min}, Max: ${category.max}, ${hasPriceText}
+                                </div>
+                            </div>
+                            <div class="action-buttons">
+                                <button class="edit-btn" data-id="${category.id}">Edit</button>
+                                <button class="delete-btn" data-id="${category.id}">Delete</button>
+                            </div>
+                        </div>
+                        <div class="variant-category-content">
+                            <h4>Variants</h4>
+                            <div class="variants-list">
+                                ${getVariantsHTML(category.variants, category.has_price)}
+                            </div>
+                        </div>
+                    `;
+                    
+                    container.appendChild(card);
+                });
+                
+                // Add event listeners to action buttons
+                document.querySelectorAll('.edit-btn').forEach(btn => {
+                    btn.addEventListener('click', () => editVariantCategory(btn.getAttribute('data-id')));
+                });
+                
+                document.querySelectorAll('.delete-btn').forEach(btn => {
+                    btn.addEventListener('click', () => confirmDeleteVariantCategory(btn.getAttribute('data-id')));
+                });
+            } else {
+                container.innerHTML = `
+                    <div class="variant-category-card">
+                        <div class="variant-category-content" style="text-align: center;">
+                            <p>No variant categories found. Create your first variant category!</p>
+                        </div>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            container.innerHTML = `
+                <div class="variant-category-card">
+                    <div class="variant-category-content" style="text-align: center;">
+                        <p>Error loading variant categories. Please try again.</p>
+                    </div>
+                </div>
+            `;
+            console.error('Error loading variant categories:', error);
+        }
+    }
+    
+    // Generate HTML for variants list
+    function getVariantsHTML(variants, hasPrice) {
+        if (!variants || variants.length === 0) {
+            return '<div class="variant-item">No variants defined</div>';
+        }
+        
+        return variants.map(variant => {
+            const priceHTML = hasPrice 
+                ? `<div class="variant-price">${formatPrice(variant.price)}</div>` 
+                : '';
+            
+            return `
+                <div class="variant-item">
+                    <div class="variant-name">${variant.name}</div>
+                    ${priceHTML}
+                </div>
+            `;
+        }).join('');
+    }
+    
+    // Format price as currency
+    function formatPrice(price) {
+        return new Intl.NumberFormat('it-IT', {
+            style: 'currency',
+            currency: 'EUR'
+        }).format(price);
+    }
+    
+    // Edit variant category
+    async function editVariantCategory(variantCategoryId) {
+        try {
+            const response = await Auth.fetch(`/api/menu/variant-categories/${variantCategoryId}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                const category = data.data;
+                
+                document.getElementById('modal-title').textContent = 'Edit Variant Category';
+                document.getElementById('variant-category-id').value = category.id;
+                document.getElementById('variant-category-name').value = category.name;
+                document.getElementById('variant-category-min').value = category.min;
+                document.getElementById('variant-category-max').value = category.max;
+                document.getElementById('variant-category-has-price').checked = category.has_price;
+                
+                // Clear variants container and add variants
+                const variantsContainer = document.getElementById('variants-container');
+                variantsContainer.innerHTML = '';
+                
+                if (category.variants && category.variants.length > 0) {
+                    category.variants.forEach(variant => {
+                        addVariantRow(variant);
+                    });
+                } else {
+                    // Add one empty variant if none exist
+                    addVariantRow();
+                }
+                
+                // Update price input visibility
+                const priceInputs = document.querySelectorAll('.variant-price-input');
+                const priceContainers = document.querySelectorAll('.variant-row .form-group:nth-child(2)');
+                
+                if (category.has_price) {
+                    priceContainers.forEach(container => container.style.display = 'block');
+                    priceInputs.forEach(input => input.disabled = false);
+                } else {
+                    priceContainers.forEach(container => container.style.display = 'none');
+                    priceInputs.forEach(input => input.disabled = true);
+                }
+                
+                document.getElementById('variant-category-modal').style.display = 'block';
+            } else {
+                showAlert('Failed to load variant category details', 'danger');
+            }
+        } catch (error) {
+            showAlert('Error loading variant category details', 'danger');
+            console.error('Variant category load error:', error);
+        }
+    }
+    
+    // Confirm delete variant category
+    function confirmDeleteVariantCategory(variantCategoryId) {
+        document.getElementById('delete-variant-category-id').value = variantCategoryId;
+        document.getElementById('delete-modal').style.display = 'block';
+    }
+    
+    // Show alert message
+    function showAlert(message, type = 'danger') {
+        const alertBox = document.getElementById('alert-box');
+        alertBox.className = `alert alert-${type}`;
+        alertBox.textContent = message;
+        alertBox.style.display = 'block';
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            alertBox.style.display = 'none';
+        }, 5000);
+    }
+</script>
+{% endblock %}

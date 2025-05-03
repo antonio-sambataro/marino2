@@ -148,3 +148,21 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Add this to auth.js
+document.addEventListener('DOMContentLoaded', function() {
+    // Redirect to login if accessing protected route without authentication
+    const protectedRoutes = ['/menu', '/orders', '/settings'];
+    const currentPath = window.location.pathname;
+    
+    if (protectedRoutes.some(route => currentPath.startsWith(route)) && !Auth.isAuthenticated()) {
+        window.location.href = '/login';
+    }
+    
+    // Log authentication status for debugging
+    console.log('Auth status:', {
+        isAuthenticated: Auth.isAuthenticated(),
+        token: Auth.getToken() ? 'Present (truncated)' : 'Missing',
+        tokenExpired: Auth.isTokenExpired()
+    });
+});

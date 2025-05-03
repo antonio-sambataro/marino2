@@ -1,19 +1,40 @@
 # -*- coding: utf-8 -*-
 import logging
+import os
+import json
 from flask import current_app
 from app.models.order import Order
-from app.models.menu import Product
+from app.models.menu import Product, Category
 
 logger = logging.getLogger(__name__)
 
-# Mappatura categorie → stampanti
-PRINT_MAPPING = {
-    1: 'POKE',
-    8: 'CUCINA',
-    14: 'BAR',
-    41: 'POKE',
-    # aggiungi altre mappature se serve
+# Default printer mapping if config file not found
+DEFAULT_PRINT_MAPPING = {
+    'POKE': [1, 41],  # Poke category IDs
+    'CUCINA': [8],    # Kitchen category IDs 
+    'BAR': [14]       # Bar category IDs
 }
+
+def get_print_mapping():
+    """Get printer mapping from configuration file or use default."""
+    try:
+        config_path = os.path.join(current_app.root_path, 'config', 'printer_mapping.json')
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        else:
+            logger.warning("Printer mapping file not found, using default mapping")
+            return DEFAULT_PRINT_MAPPING
+    except Exception as e:
+        logger.error(f"Error loading printer mapping: {e}")
+        return DEFAULT_PRINT_MAPPING
+
+def get_printer_for_category(category_id, print_mapping):
+    """Get the printer name for a category ID based on mapping."""
+    for printer, category_ids in print_mapping.items():
+        if category_id in category_ids:
+            return printer
+    return 'CUCINA'  # Default printer if no mapping found
 
 def print_order_to_kitchen(order_id):
     """Invia un ordine alle stampanti di cucina basandosi sulle categorie dei prodotti."""
@@ -28,6 +49,9 @@ def print_order_to_kitchen(order_id):
             return False
 
         logger.info(f"Processing order {order_id} for printing")
+        
+        # Get printer mapping from configuration
+        print_mapping = get_print_mapping()
 
         # Raggruppa gli articoli per destinazione
         printer_items = {}
@@ -37,11 +61,13 @@ def print_order_to_kitchen(order_id):
                 logger.warning(f"Product {item.product_id} not found, skipping")
                 continue
 
-            # Trova prima categoria mappata
-            dest = next(
-                (PRINT_MAPPING[cat.id] for cat in product.categories if cat.id in PRINT_MAPPING),
-                'CUCINA'
-            )
+            # Get the first category ID and find its printer destination
+            category_id = None
+            if product.categories:
+                category_id = product.categories[0].id
+            
+            # Find printer for this category
+            dest = get_printer_for_category(category_id, print_mapping)
 
             printer_items.setdefault(dest, []).append({
                 'name':    product.name,
