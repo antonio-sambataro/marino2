@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block title %}Home - Restaurant Self-Order{% endblock %}
+
+{% block content %}
+<div class="home">
+    <h1>Welcome to Restaurant Self-Order</h1>
+    <p>Manage your restaurant with ease</p>
+    
+    <div class="features">
+        <div class="feature-card">
+            <h2>Menu Management</h2>
+            <p>Easily create and update your restaurant menu</p>
+            <a href="{{ url_for('web.menu') }}" class="btn">Manage Menu</a>
+        </div>
+        
+        <div class="feature-card">
+            <h2>Order Processing</h2>
+            <p>Process orders quickly and efficiently</p>
+            <a href="{{ url_for('web.orders') }}" class="btn">View Orders</a>
+        </div>
+        
+        <div class="feature-card">
+            <h2>Data Synchronization</h2>
+            <p>Sync with your POS system</p>
+            <a href="{{ url_for('web.settings') }}" class="btn">Settings</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

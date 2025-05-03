@@ -1,0 +1,261 @@
+{% extends 'base.html' %}
+
+{% block title %}Login - Restaurant Self-Order{% endblock %}
+
+{% block extra_css %}
+<style>
+    .auth-container {
+        max-width: 400px;
+        margin: 40px auto;
+        padding: 20px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    .auth-tabs {
+        display: flex;
+        margin-bottom: 20px;
+        border-bottom: 1px solid #ddd;
+    }
+    
+    .auth-tab {
+        padding: 10px 20px;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+    }
+    
+    .auth-tab.active {
+        border-bottom-color: var(--primary-color);
+        color: var(--primary-color);
+        font-weight: bold;
+    }
+    
+    .auth-form {
+        display: none;
+    }
+    
+    .auth-form.active {
+        display: block;
+    }
+    
+    .form-footer {
+        margin-top: 20px;
+        text-align: center;
+    }
+    
+    .alert {
+        padding: 10px;
+        margin-bottom: 15px;
+        border-radius: 4px;
+    }
+    
+    .alert-danger {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+    
+    .alert-success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-tabs">
+        <div class="auth-tab active" data-target="login-form">Login</div>
+        <div class="auth-tab" data-target="register-form">Register</div>
+    </div>
+    
+    <div id="alert-box" style="display: none;"></div>
+    
+    <!-- Login Form -->
+    <form id="login-form" class="auth-form active">
+        <div class="form-group">
+            <label for="login-username">Username</label>
+            <input type="text" id="login-username" name="username" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="login-password">Password</label>
+            <input type="password" id="login-password" name="password" required>
+        </div>
+        
+        <button type="submit" class="btn btn-primary w-100">Login</button>
+        
+        <div class="form-footer">
+            <a href="#" id="forgot-password-link">Forgot Password?</a>
+        </div>
+    </form>
+    
+    <!-- Registration Form -->
+    <form id="register-form" class="auth-form">
+        <div class="form-group">
+            <label for="register-username">Username</label>
+            <input type="text" id="register-username" name="username" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="register-password">Password</label>
+            <input type="password" id="register-password" name="password" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="register-confirm-password">Confirm Password</label>
+            <input type="password" id="register-confirm-password" name="confirm_password" required>
+        </div>
+        
+        <button type="submit" class="btn btn-primary w-100">Register</button>
+    </form>
+    
+    <!-- Password Reset Form -->
+    <form id="reset-form" class="auth-form">
+        <div class="form-group">
+            <label for="reset-email">Email</label>
+            <input type="email" id="reset-email" name="email" required>
+        </div>
+        
+        <button type="submit" class="btn btn-primary w-100">Reset Password</button>
+        
+        <div class="form-footer">
+            <a href="#" id="back-to-login">Back to Login</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Tab switching
+    document.querySelectorAll('.auth-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            // Deactivate all tabs and forms
+            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+            
+            // Activate clicked tab and corresponding form
+            tab.classList.add('active');
+            const formId = tab.getAttribute('data-target');
+            document.getElementById(formId).classList.add('active');
+            
+            // Hide any alerts
+            document.getElementById('alert-box').style.display = 'none';
+        });
+    });
+    
+    // Forgot password link
+    document.getElementById('forgot-password-link').addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+        document.getElementById('reset-form').classList.add('active');
+    });
+    
+    // Back to login link
+    document.getElementById('back-to-login').addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+        document.getElementById('login-form').classList.add('active');
+    });
+    
+    // Show alert function
+    function showAlert(message, type = 'danger') {
+        const alertBox = document.getElementById('alert-box');
+        alertBox.className = `alert alert-${type}`;
+        alertBox.textContent = message;
+        alertBox.style.display = 'block';
+    }
+    
+    // Login form submission
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const username = document.getElementById('login-username').value;
+        const password = document.getElementById('login-password').value;
+        
+        try {
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, password })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Store token in localStorage
+                localStorage.setItem('authToken', data.token);
+                localStorage.setItem('userId', data.user.id);
+                localStorage.setItem('userRole', data.user.role);
+                
+                // Redirect to dashboard
+                window.location.href = '/';
+            } else {
+                showAlert(data.message);
+            }
+        } catch (error) {
+            showAlert('Login failed. Please try again.');
+            console.error('Login error:', error);
+        }
+    });
+    
+    // Registration form submission
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const username = document.getElementById('register-username').value;
+        const password = document.getElementById('register-password').value;
+        const confirmPassword = document.getElementById('register-confirm-password').value;
+        
+        if (password !== confirmPassword) {
+            showAlert('Passwords do not match');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, password })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showAlert('Registration successful! You can now log in.', 'success');
+                
+                // Switch to login form
+                document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+                document.querySelector('.auth-tab[data-target="login-form"]').classList.add('active');
+                document.getElementById('login-form').classList.add('active');
+            } else {
+                showAlert(data.message);
+            }
+        } catch (error) {
+            showAlert('Registration failed. Please try again.');
+            console.error('Registration error:', error);
+        }
+    });
+    
+    // Password reset form submission
+    document.getElementById('reset-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const email = document.getElementById('reset-email').value;
+        
+        // Show message (in a real app, this would send a reset email)
+        showAlert('If an account exists with this email, password reset instructions will be sent.', 'success');
+        
+        // Reset the form
+        document.getElementById('reset-form').reset();
+    });
+</script>
+{% endblock %}

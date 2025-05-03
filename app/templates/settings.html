@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block title %}Settings - Restaurant Self-Order{% endblock %}
+
+{% block content %}
+<div class="settings-page">
+    <h1>System Settings</h1>
+    <p>Configure your restaurant system</p>
+    
+    <div class="sync-section">
+        <h2>Data Synchronization</h2>
+        <p>Sync your data with the POS system</p>
+        <p>API endpoint: <code>/api/sync/sync-pos</code></p>
+        
+        <button class="btn" id="syncButton">Start Sync</button>
+        <div id="syncStatus"></div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('syncButton').addEventListener('click', function() {
+        const statusDiv = document.getElementById('syncStatus');
+        statusDiv.textContent = 'Syncing... Please wait.';
+        
+        // Call the actual sync endpoint
+        fetch('/api/sync/sync-pos')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    statusDiv.textContent = 'Sync success: ' + data.message;
+                } else {
+                    statusDiv.textContent = 'Sync error: ' + data.message;
+                }
+            })
+            .catch(error => {
+                statusDiv.textContent = 'Network error during sync';
+                console.error('Error:', error);
+            });
+    });
+</script>
+{% endblock %}

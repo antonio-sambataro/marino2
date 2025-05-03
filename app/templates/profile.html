@@ -1,0 +1,271 @@
+{% extends 'base.html' %}
+
+{% block title %}User Profile - Restaurant Self-Order{% endblock %}
+
+{% block content %}
+<div class="profile-container">
+    <h1>User Profile</h1>
+    
+    <div class="alert" id="alert-box" style="display: none;"></div>
+    
+    <div class="profile-card">
+        <div class="profile-header">
+            <h2 id="profile-username">Loading...</h2>
+            <span class="badge" id="profile-role">user</span>
+        </div>
+        
+        <div class="profile-details">
+            <p><strong>Account ID:</strong> <span id="profile-id">{{ user_id }}</span></p>
+            <p><strong>Created:</strong> <span id="profile-created">Loading...</span></p>
+        </div>
+        
+        <div class="profile-actions">
+            <button class="btn" id="change-password-btn">Change Password</button>
+        </div>
+    </div>
+    
+    <!-- Change Password Form -->
+    <div class="modal" id="password-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Change Password</h3>
+                <button class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="password-form">
+                    <div class="form-group">
+                        <label for="current-password">Current Password</label>
+                        <input type="password" id="current-password" name="current_password" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="new-password">New Password</label>
+                        <input type="password" id="new-password" name="new_password" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="confirm-password">Confirm New Password</label>
+                        <input type="password" id="confirm-password" name="confirm_password" required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Update Password</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .profile-container {
+        max-width: 800px;
+        margin: 40px auto;
+    }
+    
+    .profile-card {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+        margin-top: 20px;
+    }
+    
+    .profile-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 20px;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 15px;
+    }
+    
+    .profile-header h2 {
+        margin: 0;
+        flex-grow: 1;
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 5px 10px;
+        border-radius: 4px;
+        background-color: #6c757d;
+        color: white;
+        font-size: 0.8rem;
+    }
+    
+    .badge.admin {
+        background-color: #dc3545;
+    }
+    
+    .profile-actions {
+        margin-top: 20px;
+        display: flex;
+        justify-content: flex-end;
+    }
+    
+    /* Modal styles */
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+    }
+    
+    .modal-content {
+        background-color: white;
+        margin: 10% auto;
+        padding: 20px;
+        border-radius: 8px;
+        max-width: 500px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    }
+    
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+        margin-bottom: 15px;
+    }
+    
+    .close-btn {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+    }
+    
+    .alert {
+        padding: 10px;
+        margin-bottom: 15px;
+        border-radius: 4px;
+    }
+    
+    .alert-danger {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+    
+    .alert-success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Check if user is logged in
+        if (!Auth.isAuthenticated()) {
+            window.location.href = '/login';
+            return;
+        }
+        
+        // Load user profile data
+        loadUserProfile();
+        
+        // Change password modal
+        const modal = document.getElementById('password-modal');
+        const changePasswordBtn = document.getElementById('change-password-btn');
+        const closeBtn = document.querySelector('.close-btn');
+        
+        changePasswordBtn.addEventListener('click', () => {
+            modal.style.display = 'block';
+        });
+        
+        closeBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+        
+        // Close modal when clicking outside
+        window.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+        
+        // Password change form submission
+        document.getElementById('password-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const currentPassword = document.getElementById('current-password').value;
+            const newPassword = document.getElementById('new-password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+            
+            // Validate passwords
+            if (newPassword !== confirmPassword) {
+                showAlert('New passwords do not match', 'danger');
+                return;
+            }
+            
+            try {
+                const response = await Auth.fetch('/api/auth/change-password', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        current_password: currentPassword,
+                        new_password: newPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('Password updated successfully', 'success');
+                    modal.style.display = 'none';
+                    document.getElementById('password-form').reset();
+                } else {
+                    showAlert(data.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('Failed to update password', 'danger');
+                console.error('Password update error:', error);
+            }
+        });
+    });
+    
+    // Load user profile data from API
+    async function loadUserProfile() {
+        try {
+            const response = await Auth.fetch('/api/auth/me');
+            const data = await response.json();
+            
+            if (data.success) {
+                document.getElementById('profile-username').textContent = data.user.username;
+                document.getElementById('profile-role').textContent = data.user.role;
+                
+                if (data.user.role === 'admin') {
+                    document.getElementById('profile-role').classList.add('admin');
+                }
+                
+                document.getElementById('profile-created').textContent = new Date(data.user.created_at).toLocaleString();
+            } else {
+                showAlert('Failed to load profile data', 'danger');
+            }
+        } catch (error) {
+            showAlert('Error loading profile', 'danger');
+            console.error('Profile load error:', error);
+        }
+    }
+    
+    // Show alert message
+    function showAlert(message, type = 'danger') {
+        const alertBox = document.getElementById('alert-box');
+        alertBox.className = `alert alert-${type}`;
+        alertBox.textContent = message;
+        alertBox.style.display = 'block';
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            alertBox.style.display = 'none';
+        }, 5000);
+    }
+</script>
+{% endblock %}
